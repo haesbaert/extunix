@@ -319,6 +319,20 @@ let features =
     "POLL", L[ I "poll.h"; S "poll"; D "POLLIN"; D "POLLOUT"; Z "POLLRDHUP" ];
     "SYSINFO", L[ I"sys/sysinfo.h"; S"sysinfo"; F ("sysinfo","mem_unit")];
     "MCHECK", L[ I"mcheck.h"; S"mtrace"; S"muntrace" ];
+    "IP_RECVIF", L[
+      I "sys/types.h";
+      I "sys/socket.h";
+      I "netinet/in.h";
+      I "net/if_dl.h";
+      S "recvmsg";
+      V "IP_RECVIF";
+    ];
+    "IP_RECVDSTADDR", L[
+      I "sys/socket.h";
+      I "netinet/in.h";
+      S "recvmsg";
+      V "IP_RECVDSTADDR";
+    ];
   ]
 
 let () = 

@@ -1841,6 +1841,12 @@ external sendmsg: Unix.file_descr -> ?sendfd:Unix.file_descr -> string -> unit =
 (** Recieve a message and possibly a file descriptor from a socket. *)
 external recvmsg_fd: Unix.file_descr -> Unix.file_descr option * string = "caml_extunix_recvmsg"
 
+type acdata =
+     | FILEDESCRIPTOR of int
+     | IP_RECVIF of int
+     
+external recvmsg2: Unix.file_descr -> bytes -> int -> int -> (int * (acdata list))= "caml_extunix_recvmsg2"
+
 (** [sendfd sock fd] sends a file descriptor [fd] through a UNIX domain socket [sock].
     This will send a sentinel message at the same time, otherwise {!sendmsg} will not pass the file descriptor. *)
 let sendfd ~sock ~fd =

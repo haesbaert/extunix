@@ -8,8 +8,11 @@
  */
 
 #define EXTUNIX_WANT_SENDMSG
+#define EXTUNIX_WANT_IP_RECVIF
+#define EXTUNIX_WANT_IP_RECVDSTADDR
 
 #include "config.h"
+#include <strings.h>
 
 #if defined(EXTUNIX_HAVE_SENDMSG)
 
@@ -141,6 +144,129 @@ CAMLprim value caml_extunix_recvmsg(value fd_val)
   Store_field(res, 1, data);
 
   CAMLreturn (res);
+}
+
+enum {
+	TAG_FILEDESCRIPTOR,
+	TAG_IP_RECVIF,
+	TAG_IP_RECVDSTADDR
+};
+
+CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vlen)
+{
+	CAMLparam4(vfd, vbuf, ofs, vlen);
+	CAMLlocal4(vres, vlist, v, vx);
+	union {
+		struct cmsghdr hdr;
+		char buf[CMSG_SPACE(sizeof(int)) /* File descriptor passing */
+#ifdef EXTUNIX_HAVE_IP_RECVIF
+		    + CMSG_SPACE(sizeof(struct sockaddr_dl)) /* IP_RECVIF */
+#endif
+#if 0
+#ifdef EXTUNIX_HAVE_IP_RECVDSTADDR
+		    + CMSG_SPACE(sizeof(struct in_addr))     /* IP_RECVDSTADDR */
+#endif
+#endif
+		];
+	} cmsgbuf;
+	struct iovec		 iov;
+	struct msghdr		 msg;
+	struct cmsghdr		*cmsg;
+	ssize_t			 n;
+	size_t			 len;
+	char			 iobuf[UNIX_BUFFER_SIZE];
+	struct sockaddr_storage	 ss;
+#ifdef EXTUNIX_HAVE_IP_RECVIF
+	struct sockaddr_dl	*dst = NULL;
+#endif
+
+#if 1 				/* XXX for testing */
+	int yes = 1;
+	if (setsockopt(Int_val(vfd), IPPROTO_IP, IP_RECVIF, &yes,
+	    sizeof(int)) < 0)
+		err(1, "if_set_opt: error setting IP_RECVIF");
+
+#endif	
+	len = Long_val(vlen);
+
+	bzero(&iov, sizeof(iov));
+	bzero(&msg, sizeof(msg));
+
+	if (len > UNIX_BUFFER_SIZE)
+		len = UNIX_BUFFER_SIZE;
+
+	iov.iov_base = iobuf;
+	iov.iov_len = len;
+	/* TODO source address */
+	/* TODO msg.msg_name = &ss; */
+	/* TODO msg.msg_namelen = sizeof(ss); */
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	msg.msg_control = &cmsgbuf.buf;
+	msg.msg_controllen = sizeof(cmsgbuf.buf);
+
+	caml_enter_blocking_section();
+	/* XXX TODO flags */
+	n = recvmsg(Int_val(vfd), &msg, 0);
+	caml_leave_blocking_section();
+
+	vres = caml_alloc_small(2, 0);
+
+	if (n == -1) {
+		uerror("recvmsg", Nothing);
+		CAMLreturn (vres); /* correct ? */
+	}
+
+	memmove(&Byte(vbuf, Long_val(ofs)), iobuf, n);
+
+	vlist = Val_int(0);
+
+	/* Build the variant list vlist */
+	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+	     cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+		if (cmsg->cmsg_level == SOL_SOCKET &&
+		    cmsg->cmsg_type == SCM_RIGHTS) {
+			/* CMSG_DATA is aligned, so the following is cool */
+			v = caml_alloc_small(2, TAG_FILEDESCRIPTOR);
+			Field(v, 0) = *(int *)CMSG_DATA(cmsg);
+			Field(v, 1) = vlist;
+			vlist = v;
+			continue;
+		}
+
+#ifdef EXTUNIX_HAVE_IP_RECVIF
+		if (cmsg->cmsg_level == IPPROTO_IP &&
+		    cmsg->cmsg_type == IP_RECVIF) {
+			dst = (struct sockaddr_dl *)CMSG_DATA(cmsg);
+			v = caml_alloc_small(2, 0);
+			vx = caml_alloc_small(1, TAG_IP_RECVIF);
+			Field(vx, 0) = Val_int(dst->sdl_index);
+			Field(v, 0) = vx;
+			Field(v, 1) = vlist;
+			vlist = v;
+			continue;
+		}
+#endif
+#ifdef EXTUNIX_HAVE_IP_RECVDSTADDR
+#if 0
+		if (cmsg->cmsg_level == IPPROTO_IP &&
+		    cmsg->cmsg_type == IP_RECVDSTADDR) {
+			ipdst = *(struct in_addr *)CMSG_DATA(cmsg);
+			v = caml_alloc_small(2, TAG_IP_RECVDSTADDR);
+			Field(v, 0) = TODO;
+			Field(v, 1) = vlist;
+			vlist = v;
+			continue;
+		}
+#endif
+#endif
+	}
+
+	/* Now build the result */
+	Field(vres, 0) = Val_long(n);
+	Field(vres, 1) = vlist;
+
+	CAMLreturn(vres);
 }
 
 #endif /* EXTUNIX_HAVE_SENDMSG */
