@@ -322,6 +322,7 @@ let features =
     "IP_RECVIF", L[
       I "sys/types.h";
       I "sys/socket.h";
+      I "sys/un.h";
       I "netinet/in.h";
       I "net/if_dl.h";
       S "recvmsg";

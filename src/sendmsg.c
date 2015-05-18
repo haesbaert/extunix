@@ -16,6 +16,8 @@
 
 #if defined(EXTUNIX_HAVE_SENDMSG)
 
+value alloc_sockaddr(struct sockaddr_storage *ss);
+
 CAMLprim value caml_extunix_sendmsg(value fd_val, value sendfd_val, value data_val)
 {
   CAMLparam3(fd_val, sendfd_val, data_val);
@@ -155,7 +157,7 @@ enum {
 CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vlen)
 {
 	CAMLparam4(vfd, vbuf, ofs, vlen);
-	CAMLlocal4(vres, vlist, v, vx);
+	CAMLlocal5(vres, vlist, v, vx, vsaddr);
 	union {
 		struct cmsghdr hdr;
 		char buf[CMSG_SPACE(sizeof(int)) /* File descriptor passing */
@@ -189,17 +191,16 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 #endif	
 	len = Long_val(vlen);
 
-	bzero(&iov, sizeof(iov));
-	bzero(&msg, sizeof(msg));
+	memset(&iov, 0, sizeof(iov));
+	memset(&msg, 0, sizeof(msg));
 
 	if (len > UNIX_BUFFER_SIZE)
 		len = UNIX_BUFFER_SIZE;
 
 	iov.iov_base = iobuf;
 	iov.iov_len = len;
-	/* TODO source address */
-	/* TODO msg.msg_name = &ss; */
-	/* TODO msg.msg_namelen = sizeof(ss); */
+	msg.msg_name = &ss;
+	msg.msg_namelen = sizeof(ss);
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = &cmsgbuf.buf;
@@ -216,6 +217,8 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 		uerror("recvmsg", Nothing);
 		CAMLreturn (vres); /* correct ? */
 	}
+
+	vsaddr = alloc_sockaddr(&ss); /* TODO include me */
 
 	memmove(&Byte(vbuf, Long_val(ofs)), iobuf, n);
 
@@ -267,6 +270,49 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 	Field(vres, 1) = vlist;
 
 	CAMLreturn(vres);
+}
+
+value alloc_sockaddr(struct sockaddr_storage *ss)
+{
+	value res, a;
+	struct sockaddr_un *sun;
+	struct sockaddr_in *sin;
+	struct sockaddr_in6 *sin6;
+
+	switch(ss->ss_family) {
+	case AF_UNIX:
+		sun = (struct sockaddr_un *) ss;
+		a = caml_copy_string(sun->sun_path);
+		Begin_root (a);
+		res = caml_alloc_small(1, 0);
+		Field(res,0) = a;
+		End_roots();
+		break;
+	case AF_INET:
+		sin = (struct sockaddr_in *) ss;
+		a = caml_alloc_string(4);
+		memcpy(String_val(a), &sin->sin_addr, 4);
+		Begin_root (a);
+		res = caml_alloc_small(2, 1);
+		Field(res, 0) = a;
+		Field(res, 1) = Val_int(ntohs(sin->sin_port));
+		End_roots();
+		break;
+	case AF_INET6:
+		sin6 = (struct sockaddr_in6 *) ss;
+		a = caml_alloc_string(16);
+		memcpy(String_val(a), &sin6->sin6_addr, 16);
+		Begin_root (a);
+		res = caml_alloc_small(2, 1);
+		Field(res, 0) = a;
+		Field(res, 1) = Val_int(ntohs(sin6->sin6_port));
+		End_roots();
+		break;
+	default:
+		unix_error(EAFNOSUPPORT, "", Nothing);
+	}
+
+	return res;
 }
 
 #endif /* EXTUNIX_HAVE_SENDMSG */
