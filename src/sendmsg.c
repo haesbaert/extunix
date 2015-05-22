@@ -16,7 +16,7 @@
 
 #if defined(EXTUNIX_HAVE_SENDMSG)
 
-value alloc_sockaddr(struct sockaddr_storage *ss);
+value my_alloc_sockaddr(struct sockaddr_storage *ss);
 
 CAMLprim value caml_extunix_sendmsg(value fd_val, value sendfd_val, value data_val)
 {
@@ -211,14 +211,14 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 	n = recvmsg(Int_val(vfd), &msg, 0);
 	caml_leave_blocking_section();
 
-	vres = caml_alloc_small(2, 0);
+	vres = caml_alloc_small(3, 0);
 
 	if (n == -1) {
 		uerror("recvmsg", Nothing);
 		CAMLreturn (vres); /* correct ? */
 	}
 
-	vsaddr = alloc_sockaddr(&ss); /* TODO include me */
+	vsaddr = my_alloc_sockaddr(&ss);
 
 	memmove(&Byte(vbuf, Long_val(ofs)), iobuf, n);
 
@@ -267,12 +267,13 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 
 	/* Now build the result */
 	Field(vres, 0) = Val_long(n);
-	Field(vres, 1) = vlist;
+	Field(vres, 1) = vsaddr;
+	Field(vres, 2) = vlist;
 
 	CAMLreturn(vres);
 }
 
-value alloc_sockaddr(struct sockaddr_storage *ss)
+value my_alloc_sockaddr(struct sockaddr_storage *ss)
 {
 	value res, a;
 	struct sockaddr_un *sun;
