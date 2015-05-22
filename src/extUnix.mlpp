@@ -789,6 +789,16 @@ let getsockopt_int sock opt v =
   with
     Not_found -> raise (Not_available "getsock_opt_int")
 
+type socket_bool_option =
+| IP_RECVIF
+| IP_RECVDSTADDR
+
+(** Set a bool-valued option in the given socket *)
+external setsockopt_bool : Unix.file_descr -> socket_bool_option -> bool -> unit = "caml_extunix_setsockopt_bool"
+
+(** Get the current value for the bool-valued option in the given socket *)
+external getsockopt_bool : Unix.file_descr -> socket_bool_option -> bool = "caml_extunix_getsockopt_bool"
+
 END
 
 HAVE POLL
