@@ -149,174 +149,164 @@ CAMLprim value caml_extunix_recvmsg(value fd_val)
 }
 
 enum {
-	TAG_FILEDESCRIPTOR,
-	TAG_IP_RECVIF,
-	TAG_IP_RECVDSTADDR
+  TAG_FILEDESCRIPTOR,
+  TAG_IP_RECVIF,
+  TAG_IP_RECVDSTADDR
 };
 
 CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vlen)
 {
-	CAMLparam4(vfd, vbuf, ofs, vlen);
-	CAMLlocal5(vres, vlist, v, vx, vsaddr);
-	union {
-		struct cmsghdr hdr;
-		char buf[CMSG_SPACE(sizeof(int)) /* File descriptor passing */
+  CAMLparam4(vfd, vbuf, ofs, vlen);
+  CAMLlocal5(vres, vlist, v, vx, vsaddr);
+  union {
+    struct cmsghdr hdr;
+    char buf[CMSG_SPACE(sizeof(int)) /* File descriptor passing */
 #ifdef EXTUNIX_HAVE_IP_RECVIF
-		    + CMSG_SPACE(sizeof(struct sockaddr_dl)) /* IP_RECVIF */
+        + CMSG_SPACE(sizeof(struct sockaddr_dl)) /* IP_RECVIF */
 #endif
 #ifdef EXTUNIX_HAVE_IP_RECVDSTADDR
-		    + CMSG_SPACE(sizeof(struct in_addr))     /* IP_RECVDSTADDR */
+        + CMSG_SPACE(sizeof(struct in_addr))     /* IP_RECVDSTADDR */
 #endif
-		];
-	} cmsgbuf;
-	struct iovec		 iov;
-	struct msghdr		 msg;
-	struct cmsghdr		*cmsg;
-	ssize_t			 n;
-	size_t			 len;
-	char			 iobuf[UNIX_BUFFER_SIZE];
-	struct sockaddr_storage	 ss;
+    ];
+  } cmsgbuf;
+  struct iovec             iov;
+  struct msghdr            msg;
+  struct cmsghdr          *cmsg;
+  ssize_t                  n;
+  size_t                   len;
+  char                     iobuf[UNIX_BUFFER_SIZE];
+  struct sockaddr_storage  ss;
 #ifdef EXTUNIX_HAVE_IP_RECVIF
-	struct sockaddr_dl	*dst = NULL;
+  struct sockaddr_dl      *dst = NULL;
 #endif
 
-#if 1 				/* XXX for testing */
-	int yes = 1;
-	if (setsockopt(Int_val(vfd), IPPROTO_IP, IP_RECVIF, &yes,
-	    sizeof(int)) < 0)
-		err(1, "if_set_opt: error setting IP_RECVIF");
+  len = Long_val(vlen);
 
-	if (setsockopt(Int_val(vfd), IPPROTO_IP, IP_RECVDSTADDR, &yes,
-	    sizeof(int)) < 0)
-		err(1, "if_set_opt: error setting IP_RECVIF");
-#endif	
-	len = Long_val(vlen);
+  memset(&iov, 0, sizeof(iov));
+  memset(&msg, 0, sizeof(msg));
 
-	memset(&iov, 0, sizeof(iov));
-	memset(&msg, 0, sizeof(msg));
+  if (len > UNIX_BUFFER_SIZE)
+    len = UNIX_BUFFER_SIZE;
 
-	if (len > UNIX_BUFFER_SIZE)
-		len = UNIX_BUFFER_SIZE;
+  iov.iov_base = iobuf;
+  iov.iov_len = len;
+  msg.msg_name = &ss;
+  msg.msg_namelen = sizeof(ss);
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  msg.msg_control = &cmsgbuf.buf;
+  msg.msg_controllen = sizeof(cmsgbuf.buf);
 
-	iov.iov_base = iobuf;
-	iov.iov_len = len;
-	msg.msg_name = &ss;
-	msg.msg_namelen = sizeof(ss);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	msg.msg_control = &cmsgbuf.buf;
-	msg.msg_controllen = sizeof(cmsgbuf.buf);
+  caml_enter_blocking_section();
+  /* XXX TODO flags */
+  n = recvmsg(Int_val(vfd), &msg, 0);
+  caml_leave_blocking_section();
 
-	caml_enter_blocking_section();
-	/* XXX TODO flags */
-	n = recvmsg(Int_val(vfd), &msg, 0);
-	caml_leave_blocking_section();
+  vres = caml_alloc_small(3, 0);
 
-	vres = caml_alloc_small(3, 0);
+  if (n == -1) {
+    uerror("recvmsg", Nothing);
+    CAMLreturn (vres);
+  }
 
-	if (n == -1) {
-		uerror("recvmsg", Nothing);
-		CAMLreturn (vres); /* correct ? */
-	}
+  vsaddr = my_alloc_sockaddr(&ss);
 
-	vsaddr = my_alloc_sockaddr(&ss);
+  memmove(&Byte(vbuf, Long_val(ofs)), iobuf, n);
 
-	memmove(&Byte(vbuf, Long_val(ofs)), iobuf, n);
+  vlist = Val_int(0);
 
-	vlist = Val_int(0);
-
-	/* Build the variant list vlist */
-	for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
-	     cmsg = CMSG_NXTHDR(&msg, cmsg)) {
-		if (cmsg->cmsg_level == SOL_SOCKET &&
-		    cmsg->cmsg_type == SCM_RIGHTS) {
-			/* CMSG_DATA is aligned, so the following is cool */
-			v = caml_alloc_small(2, TAG_FILEDESCRIPTOR);
-			Field(v, 0) = Val_int(*(int *)CMSG_DATA(cmsg));
-			Field(v, 1) = vlist;
-			vlist = v;
-			continue;
-		}
+  /* Build the variant list vlist */
+  for (cmsg = CMSG_FIRSTHDR(&msg); cmsg != NULL;
+       cmsg = CMSG_NXTHDR(&msg, cmsg)) {
+    if (cmsg->cmsg_level == SOL_SOCKET &&
+        cmsg->cmsg_type == SCM_RIGHTS) {
+      /* CMSG_DATA is aligned, so the following is cool */
+      v = caml_alloc_small(2, TAG_FILEDESCRIPTOR);
+      Field(v, 0) = Val_int(*(int *)CMSG_DATA(cmsg));
+      Field(v, 1) = vlist;
+      vlist = v;
+      continue;
+    }
 
 #ifdef EXTUNIX_HAVE_IP_RECVIF
-		if (cmsg->cmsg_level == IPPROTO_IP &&
-		    cmsg->cmsg_type == IP_RECVIF) {
-			dst = (struct sockaddr_dl *)CMSG_DATA(cmsg);
-			v = caml_alloc_small(2, 0);
-			vx = caml_alloc_small(1, TAG_IP_RECVIF);
-			Field(vx, 0) = Val_int(dst->sdl_index);
-			Field(v, 0) = vx;
-			Field(v, 1) = vlist;
-			vlist = v;
-			continue;
-		}
+    if (cmsg->cmsg_level == IPPROTO_IP &&
+        cmsg->cmsg_type == IP_RECVIF) {
+      dst = (struct sockaddr_dl *)CMSG_DATA(cmsg);
+      v = caml_alloc_small(2, 0);
+      vx = caml_alloc_small(1, TAG_IP_RECVIF);
+      Field(vx, 0) = Val_int(dst->sdl_index);
+      Field(v, 0) = vx;
+      Field(v, 1) = vlist;
+      vlist = v;
+      continue;
+    }
 #endif
 #ifdef EXTUNIX_HAVE_IP_RECVDSTADDR
-		if (cmsg->cmsg_level == IPPROTO_IP &&
-		    cmsg->cmsg_type == IP_RECVDSTADDR) {
-			struct in_addr ipdst;
-			ipdst = *(struct in_addr *)CMSG_DATA(cmsg);
-			v = caml_alloc_small(2, 0);
-			vx = caml_alloc_small(1, TAG_IP_RECVDSTADDR);
-			Field(vx, 0) = caml_alloc_string(4);
-			memcpy(String_val(Field(vx, 0)), &ipdst, 4);
-			Field(v, 0) = vx;
-			Field(v, 1) = vlist;
-			vlist = v;
-			continue;
-		}
+    if (cmsg->cmsg_level == IPPROTO_IP &&
+        cmsg->cmsg_type == IP_RECVDSTADDR) {
+      struct in_addr ipdst;
+      ipdst = *(struct in_addr *)CMSG_DATA(cmsg);
+      v = caml_alloc_small(2, 0);
+      vx = caml_alloc_small(1, TAG_IP_RECVDSTADDR);
+      Field(vx, 0) = caml_alloc_string(4);
+      memcpy(String_val(Field(vx, 0)), &ipdst, 4);
+      Field(v, 0) = vx;
+      Field(v, 1) = vlist;
+      vlist = v;
+      continue;
+    }
 #endif
-	}
+  }
 
-	/* Now build the result */
-	Field(vres, 0) = Val_long(n);
-	Field(vres, 1) = vsaddr;
-	Field(vres, 2) = vlist;
+  /* Now build the result */
+  Field(vres, 0) = Val_long(n);
+  Field(vres, 1) = vsaddr;
+  Field(vres, 2) = vlist;
 
-	CAMLreturn(vres);
+  CAMLreturn(vres);
 }
 
 value my_alloc_sockaddr(struct sockaddr_storage *ss)
 {
-	value res, a;
-	struct sockaddr_un *sun;
-	struct sockaddr_in *sin;
-	struct sockaddr_in6 *sin6;
+  value res, a;
+  struct sockaddr_un *sun;
+  struct sockaddr_in *sin;
+  struct sockaddr_in6 *sin6;
 
-	switch(ss->ss_family) {
-	case AF_UNIX:
-		sun = (struct sockaddr_un *) ss;
-		a = caml_copy_string(sun->sun_path);
-		Begin_root (a);
-		res = caml_alloc_small(1, 0);
-		Field(res,0) = a;
-		End_roots();
-		break;
-	case AF_INET:
-		sin = (struct sockaddr_in *) ss;
-		a = caml_alloc_string(4);
-		memcpy(String_val(a), &sin->sin_addr, 4);
-		Begin_root (a);
-		res = caml_alloc_small(2, 1);
-		Field(res, 0) = a;
-		Field(res, 1) = Val_int(ntohs(sin->sin_port));
-		End_roots();
-		break;
-	case AF_INET6:
-		sin6 = (struct sockaddr_in6 *) ss;
-		a = caml_alloc_string(16);
-		memcpy(String_val(a), &sin6->sin6_addr, 16);
-		Begin_root (a);
-		res = caml_alloc_small(2, 1);
-		Field(res, 0) = a;
-		Field(res, 1) = Val_int(ntohs(sin6->sin6_port));
-		End_roots();
-		break;
-	default:
-		unix_error(EAFNOSUPPORT, "", Nothing);
-	}
+  switch(ss->ss_family) {
+  case AF_UNIX:
+    sun = (struct sockaddr_un *) ss;
+    a = caml_copy_string(sun->sun_path);
+    Begin_root (a);
+    res = caml_alloc_small(1, 0);
+    Field(res,0) = a;
+    End_roots();
+    break;
+  case AF_INET:
+    sin = (struct sockaddr_in *) ss;
+    a = caml_alloc_string(4);
+    memcpy(String_val(a), &sin->sin_addr, 4);
+    Begin_root (a);
+    res = caml_alloc_small(2, 1);
+    Field(res, 0) = a;
+    Field(res, 1) = Val_int(ntohs(sin->sin_port));
+    End_roots();
+    break;
+  case AF_INET6:
+    sin6 = (struct sockaddr_in6 *) ss;
+    a = caml_alloc_string(16);
+    memcpy(String_val(a), &sin6->sin6_addr, 16);
+    Begin_root (a);
+    res = caml_alloc_small(2, 1);
+    Field(res, 0) = a;
+    Field(res, 1) = Val_int(ntohs(sin6->sin6_port));
+    End_roots();
+    break;
+  default:
+    unix_error(EAFNOSUPPORT, "", Nothing);
+  }
 
-	return res;
+  return res;
 }
 
 #endif /* EXTUNIX_HAVE_SENDMSG */
