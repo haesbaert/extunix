@@ -231,7 +231,7 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 		    cmsg->cmsg_type == SCM_RIGHTS) {
 			/* CMSG_DATA is aligned, so the following is cool */
 			v = caml_alloc_small(2, TAG_FILEDESCRIPTOR);
-			Field(v, 0) = *(int *)CMSG_DATA(cmsg);
+			Field(v, 0) = Val_int(*(int *)CMSG_DATA(cmsg));
 			Field(v, 1) = vlist;
 			vlist = v;
 			continue;
