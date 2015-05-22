@@ -164,10 +164,8 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 #ifdef EXTUNIX_HAVE_IP_RECVIF
 		    + CMSG_SPACE(sizeof(struct sockaddr_dl)) /* IP_RECVIF */
 #endif
-#if 0
 #ifdef EXTUNIX_HAVE_IP_RECVDSTADDR
 		    + CMSG_SPACE(sizeof(struct in_addr))     /* IP_RECVDSTADDR */
-#endif
 #endif
 		];
 	} cmsgbuf;
@@ -188,6 +186,9 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 	    sizeof(int)) < 0)
 		err(1, "if_set_opt: error setting IP_RECVIF");
 
+	if (setsockopt(Int_val(vfd), IPPROTO_IP, IP_RECVDSTADDR, &yes,
+	    sizeof(int)) < 0)
+		err(1, "if_set_opt: error setting IP_RECVIF");
 #endif	
 	len = Long_val(vlen);
 
@@ -251,17 +252,19 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
 		}
 #endif
 #ifdef EXTUNIX_HAVE_IP_RECVDSTADDR
-#if 0
 		if (cmsg->cmsg_level == IPPROTO_IP &&
 		    cmsg->cmsg_type == IP_RECVDSTADDR) {
+			struct in_addr ipdst;
 			ipdst = *(struct in_addr *)CMSG_DATA(cmsg);
-			v = caml_alloc_small(2, TAG_IP_RECVDSTADDR);
-			Field(v, 0) = TODO;
+			v = caml_alloc_small(2, 0);
+			vx = caml_alloc_small(1, TAG_IP_RECVDSTADDR);
+			Field(vx, 0) = caml_alloc_string(4);
+			memcpy(String_val(Field(vx, 0)), &ipdst, 4);
+			Field(v, 0) = vx;
 			Field(v, 1) = vlist;
 			vlist = v;
 			continue;
 		}
-#endif
 #endif
 	}
 

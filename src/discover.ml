@@ -329,7 +329,9 @@ let features =
       V "IP_RECVIF";
     ];
     "IP_RECVDSTADDR", L[
+      I "sys/types.h";
       I "sys/socket.h";
+      I "sys/un.h";
       I "netinet/in.h";
       S "recvmsg";
       V "IP_RECVDSTADDR";

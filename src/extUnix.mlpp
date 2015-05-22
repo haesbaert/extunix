@@ -1844,6 +1844,7 @@ external recvmsg_fd: Unix.file_descr -> Unix.file_descr option * string = "caml_
 type acdata =
      | FILEDESCRIPTOR of int
      | IP_RECVIF of int
+     | IP_RECVDSTADDR of Unix.inet_addr
      
 external recvmsg2: Unix.file_descr -> bytes -> int -> int -> (int * Unix.sockaddr * (acdata list))= "caml_extunix_recvmsg2"
 
