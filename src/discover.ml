@@ -309,8 +309,10 @@ let features =
     "SPLICE", L[ I "fcntl.h"; S"splice"; ];
     "TEE", L[ I "fcntl.h"; S"tee"; ];
     "VMSPLICE", L[ I "fcntl.h"; S"vmsplice"; ];
-    "SOCKOPT", L[ I "sys/socket.h"; I "netinet/in.h"; I"netinet/tcp.h";
-                  S"setsockopt"; S"getsockopt"; ];
+    "SOCKOPT", L[
+      I "sys/socket.h"; I "netinet/in.h"; I"netinet/tcp.h";
+      S"setsockopt"; S"getsockopt";
+    ];
     "TCP_KEEPCNT", L[I"netinet/in.h"; I"netinet/tcp.h";V"TCP_KEEPCNT"];
     "TCP_KEEPIDLE", L[I"netinet/in.h"; I"netinet/tcp.h";V"TCP_KEEPIDLE"];
     "TCP_KEEPINTVL", L[I"netinet/in.h"; I"netinet/tcp.h";V"TCP_KEEPINTVL"];
