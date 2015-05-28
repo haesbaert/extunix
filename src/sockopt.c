@@ -4,6 +4,10 @@
 
 #if defined(EXTUNIX_HAVE_SOCKOPT)
 
+#include <caml/fail.h>
+
+void not_available(const char *);
+
 #ifndef TCP_KEEPCNT
 #define TCP_KEEPCNT -1
 #endif
@@ -29,8 +33,7 @@ CAMLprim value caml_extunix_setsockopt_int(value fd, value k, value v)
     caml_invalid_argument("setsockopt_int");
 
   if (tcp_options[Int_val(k)] == -1) {
-    errno = ENOPROTOOPT;
-    uerror("setsockopt_int", Nothing);
+    not_available("setsockopt_int");
     return Val_unit;
   }
 
@@ -49,8 +52,7 @@ CAMLprim value caml_extunix_getsockopt_int(value fd, value k)
     caml_invalid_argument("getsockopt_int");
 
   if (tcp_options[Int_val(k)] == -1) {
-    errno = ENOPROTOOPT;
-    uerror("setsockopt_int", Nothing);
+    not_available("getsockopt_int");
     return Val_unit;
   }
 
@@ -58,6 +60,19 @@ CAMLprim value caml_extunix_getsockopt_int(value fd, value k)
     uerror("getsockopt_int", Nothing);
 
   return Val_int(optval);
+}
+
+/* XXX move this to a common area */
+static value *not_available_exn;
+
+void
+not_available(const char *feature)
+{
+  if (not_available_exn == NULL)
+    not_available_exn = caml_named_value("Not_available");
+  if (not_available_exn == NULL)
+    caml_invalid_argument("Exception Not_available not initialized");
+  caml_raise_with_string(*not_available_exn, feature);
 }
 
 #endif
