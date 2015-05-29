@@ -17,6 +17,7 @@
 #if defined(EXTUNIX_HAVE_SENDMSG)
 
 value my_alloc_sockaddr(struct sockaddr_storage *ss);
+value int_to_recvflags(int);
 
 CAMLprim value caml_extunix_sendmsg(value fd_val, value sendfd_val, value data_val)
 {
@@ -209,7 +210,7 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
   n = recvmsg(Int_val(vfd), &msg, sendflags);
   caml_leave_blocking_section();
 
-  vres = caml_alloc_small(3, 0);
+  vres = caml_alloc_small(4, 0);
 
   if (n == -1) {
     uerror("recvmsg", Nothing);
@@ -269,6 +270,7 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
   Field(vres, 0) = Val_long(n);
   Field(vres, 1) = vsaddr;
   Field(vres, 2) = vlist;
+  Field(vres, 3) = int_to_recvflags(msg.msg_flags);
 
   CAMLreturn(vres);
 }
@@ -314,6 +316,57 @@ value my_alloc_sockaddr(struct sockaddr_storage *ss)
   }
 
   return res;
+}
+
+enum {
+  TAG_MSG_OOB,
+  TAG_MSG_EOR,
+  TAG_MSG_TRUNC,
+  TAG_MSG_CTRUNC
+#if 0
+  TAG_MSG_BCAST,
+  TAG_MSG_MCAST,
+#endif
+};
+
+static struct {
+  int flag;
+  int tag;
+} recv_flags[] = {
+  { MSG_OOB,    TAG_MSG_OOB },
+  { MSG_EOR,    TAG_MSG_EOR },
+  { MSG_TRUNC,  TAG_MSG_TRUNC },
+  { MSG_CTRUNC, TAG_MSG_CTRUNC },
+#if 0
+  { MSG_BCAST,  TAG_MSG_BCAST },
+  { MSG_MCAST,  TAG_MSG_MCAST },
+#endif
+  { 0,  0 }
+};
+
+value int_to_recvflags(int flags)
+{
+  value list = Val_int(0);
+  value v;
+  int i, flag, tag;
+
+  for (i = 0; ;i++) {
+    flag = recv_flags[i].flag;
+    tag = recv_flags[i].tag;
+
+    if (!flag)
+      break;
+
+    if ((flags & flag) == 0)
+      continue;
+
+    v = caml_alloc_small(2, 0);
+    Field(v, 0) = Val_int(tag);
+    Field(v, 1) = list;
+    list = v;
+  }
+
+  return (list);
 }
 
 #endif /* EXTUNIX_HAVE_SENDMSG */

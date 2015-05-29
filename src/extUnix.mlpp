@@ -1852,12 +1852,18 @@ external sendmsg: Unix.file_descr -> ?sendfd:Unix.file_descr -> string -> unit =
 external recvmsg_fd: Unix.file_descr -> Unix.file_descr option * string = "caml_extunix_recvmsg"
 
 type acdata =
-     | FILEDESCRIPTOR of int
-     | IP_RECVIF of int
-     | IP_RECVDSTADDR of Unix.inet_addr
-     
+  | FILEDESCRIPTOR of int
+  | IP_RECVIF of int
+  | IP_RECVDSTADDR of Unix.inet_addr
+
+type recv_flag =
+  | MSG_OOB
+  | MSG_EOR
+  | MSG_TRUNC
+  | MSG_CTRUNC
+
 external recvmsg2: Unix.file_descr -> bytes -> int -> int -> (Unix.msg_flag list) ->
-  (int * Unix.sockaddr * (acdata list)) = "caml_extunix_recvmsg2"
+  (int * Unix.sockaddr * (acdata list) * (recv_flag list)) = "caml_extunix_recvmsg2"
 
 (** [sendfd sock fd] sends a file descriptor [fd] through a UNIX domain socket [sock].
     This will send a sentinel message at the same time, otherwise {!sendmsg} will not pass the file descriptor. *)
