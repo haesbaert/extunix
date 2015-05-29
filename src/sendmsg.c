@@ -154,7 +154,13 @@ enum {
   TAG_IP_RECVDSTADDR
 };
 
-CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vlen)
+/* From caml, sadly, it's a static in sendrecv.c */
+static int msg_flag_table[] = {
+  MSG_OOB, MSG_DONTROUTE, MSG_PEEK
+};
+
+CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vlen,
+  value vflags)
 {
   CAMLparam4(vfd, vbuf, ofs, vlen);
   CAMLlocal5(vres, vlist, v, vx, vsaddr);
@@ -176,6 +182,7 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
   size_t                   len;
   char                     iobuf[UNIX_BUFFER_SIZE];
   struct sockaddr_storage  ss;
+  int                      sendflags;
 #ifdef EXTUNIX_HAVE_IP_RECVIF
   struct sockaddr_dl      *dst = NULL;
 #endif
@@ -196,10 +203,10 @@ CAMLprim value caml_extunix_recvmsg2(value vfd, value vbuf, value ofs, value vle
   msg.msg_iovlen = 1;
   msg.msg_control = &cmsgbuf.buf;
   msg.msg_controllen = sizeof(cmsgbuf.buf);
+  sendflags = caml_convert_flag_list(vflags, msg_flag_table);
 
   caml_enter_blocking_section();
-  /* XXX TODO flags */
-  n = recvmsg(Int_val(vfd), &msg, 0);
+  n = recvmsg(Int_val(vfd), &msg, sendflags);
   caml_leave_blocking_section();
 
   vres = caml_alloc_small(3, 0);

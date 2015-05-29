@@ -1856,7 +1856,8 @@ type acdata =
      | IP_RECVIF of int
      | IP_RECVDSTADDR of Unix.inet_addr
      
-external recvmsg2: Unix.file_descr -> bytes -> int -> int -> (int * Unix.sockaddr * (acdata list))= "caml_extunix_recvmsg2"
+external recvmsg2: Unix.file_descr -> bytes -> int -> int -> (Unix.msg_flag list) ->
+  (int * Unix.sockaddr * (acdata list)) = "caml_extunix_recvmsg2"
 
 (** [sendfd sock fd] sends a file descriptor [fd] through a UNIX domain socket [sock].
     This will send a sentinel message at the same time, otherwise {!sendmsg} will not pass the file descriptor. *)
